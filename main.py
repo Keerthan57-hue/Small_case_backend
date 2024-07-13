@@ -1,7 +1,9 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Query
 import requests
 import jwt
 import datetime
+import logging
+from pydantic import BaseModel
 
 from starlette.middleware.cors import CORSMiddleware
 
@@ -20,17 +22,21 @@ app.add_middleware(
 )
 
 GATEWAY_SECRET = "gatewayDemo_secret"
-# SECRET = "have-a-good-day"
 GATEWAY = "gatewaydemo"
+logging.basicConfig(level=logging.INFO)
+
+
+class CreateTransactionRequest(BaseModel):
+    include_mf: bool
 
 
 @app.post("/create_transaction")
-async def create_transaction():
-    url = f"https://gatewayapi.smallcase.com/gateway/{GATEWAY}/transaction"
+async def create_transaction(request: CreateTransactionRequest):
+    logging.info(f"include_mf: {request.include_mf}")
     payload = {
         "intent": "HOLDINGS_IMPORT",
         "version": "v2",
-        "assetConfig": {"mfHoldings": True}
+        "assetConfig": {"mfHoldings": request.include_mf}
     }
     headers = {
         "accept": "application/json",
@@ -39,8 +45,15 @@ async def create_transaction():
         "content-type": "application/json"
     }
 
+    logging.info(f"Headers: {headers}")
+
+    url = f"https://gatewayapi.smallcase.com/gateway/{GATEWAY}/transaction"
     response = requests.post(url, json=payload, headers=headers)
     token = headers["x-gateway-authtoken"]
+
+    logging.info(f"Response: {response.json()}")
+    logging.info(f"Token: {token}")
+
     return {
         "response": response.json(),
         "token": token,
@@ -49,21 +62,23 @@ async def create_transaction():
 
 
 def create_guest_jwt():
+    issue = datetime.datetime.utcnow()
+    expire = issue + datetime.timedelta(days=1)
     payload = {
         "guest": True,
-        "exp": 2556124199,
+        "exp": expire,
     }
     token = jwt.encode(payload, GATEWAY_SECRET, algorithm="HS256")
+    logging.info(f"Generated JWT: {token}")
     return token
 
+
 @app.get("/fetch_holdings")
-async def fetch_holdings(auth_token: str, version: str = "v2", mf_holdings: bool = False):
-    url = f"https://gatewayapi.smallcase.com/v1/{GATEWAY}/engine/user/holdings"
+async def fetch_holdings(auth_token: str, include_mf: bool = Query(False), v2_format: bool = Query(False)):
     params = {
-        "version": version
+        "version": "v2" if v2_format else "v1",
+        "mfHoldings": include_mf,
     }
-    if mf_holdings:
-        params["mfHoldings"] = "true"
 
     headers = {
         "x-gateway-secret": GATEWAY_SECRET,
@@ -71,5 +86,8 @@ async def fetch_holdings(auth_token: str, version: str = "v2", mf_holdings: bool
         "accept": "application/json"
     }
 
+    logging.info(f"Fetch Holdings Headers: {headers}")
+
+    url = f"https://gatewayapi.smallcase.com/v1/{GATEWAY}/engine/user/holdings"
     response = requests.get(url, params=params, headers=headers)
     return response.json()
