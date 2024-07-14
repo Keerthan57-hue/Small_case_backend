@@ -86,7 +86,3 @@ def create_guest_jwt():
     token = jwt.encode(payload, GATEWAY_SECRET, algorithm="HS256")
     logging.info(f"Generated JWT: {token}")
     return token
-
-
-if __name__ == "__main__":
-    uvicorn.run(app, host="localhost", port=8001)
