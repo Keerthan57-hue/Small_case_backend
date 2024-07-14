@@ -1,16 +1,16 @@
+import uvicorn
 from fastapi import FastAPI, Request, Query
 import requests
 import jwt
 import datetime
 import logging
-from pydantic import BaseModel
 
 from starlette.middleware.cors import CORSMiddleware
 
 app = FastAPI()
 
 origins = [
-    "http://localhost:3000",
+    "http://localhost:3000"
 ]
 
 app.add_middleware(
@@ -26,17 +26,12 @@ GATEWAY = "gatewaydemo"
 logging.basicConfig(level=logging.INFO)
 
 
-class CreateTransactionRequest(BaseModel):
-    include_mf: bool
-
-
 @app.post("/create_transaction")
-async def create_transaction(request: CreateTransactionRequest):
-    logging.info(f"include_mf: {request.include_mf}")
+async def create_transaction():
     payload = {
         "intent": "HOLDINGS_IMPORT",
         "version": "v2",
-        "assetConfig": {"mfHoldings": request.include_mf}
+        "assetConfig": {"mfHoldings": True},
     }
     headers = {
         "accept": "application/json",
@@ -61,18 +56,6 @@ async def create_transaction(request: CreateTransactionRequest):
     }
 
 
-def create_guest_jwt():
-    issue = datetime.datetime.utcnow()
-    expire = issue + datetime.timedelta(days=1)
-    payload = {
-        "guest": True,
-        "exp": expire,
-    }
-    token = jwt.encode(payload, GATEWAY_SECRET, algorithm="HS256")
-    logging.info(f"Generated JWT: {token}")
-    return token
-
-
 @app.get("/fetch_holdings")
 async def fetch_holdings(auth_token: str, include_mf: bool = Query(False), v2_format: bool = Query(False)):
     params = {
@@ -91,3 +74,19 @@ async def fetch_holdings(auth_token: str, include_mf: bool = Query(False), v2_fo
     url = f"https://gatewayapi.smallcase.com/v1/{GATEWAY}/engine/user/holdings"
     response = requests.get(url, params=params, headers=headers)
     return response.json()
+
+
+def create_guest_jwt():
+    issue = datetime.datetime.utcnow()
+    expire = issue + datetime.timedelta(days=1)
+    payload = {
+        "guest": True,
+        "exp": expire,
+    }
+    token = jwt.encode(payload, GATEWAY_SECRET, algorithm="HS256")
+    logging.info(f"Generated JWT: {token}")
+    return token
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="localhost", port=8001)
